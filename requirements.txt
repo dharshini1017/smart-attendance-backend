@@ -1,8 +1,17 @@
-Flask
-Flask-Cors
-Flask-JWT-Extended
-mysql-connector-python
-bcrypt
-opencv-python
-numpy
-face-recognition
+# Flask and CORS
+Flask==2.3.4
+Flask-Cors==3.1.2
+Flask-JWT-Extended==4.5.1
+
+# Database
+mysql-connector-python==8.1.0
+
+# Password hashing
+bcrypt==4.1.0
+
+# Image processing (headless OpenCV for server)
+opencv-python-headless==4.8.1.78
+numpy==1.26.5
+
+# Optional: dotenv for environment variables if you use .env
+python-dotenv==1.0.0
