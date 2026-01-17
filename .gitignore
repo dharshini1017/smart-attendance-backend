@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+.env
+
+# Logs
+*.log
+
+# Face images (do not upload real data)
+faces/*
+!faces/.gitkeep
+
+# OS
+.DS_Store

@@ -1,0 +1,8 @@
+Flask
+Flask-Cors
+Flask-JWT-Extended
+mysql-connector-python
+bcrypt
+opencv-python
+numpy
+face-recognition
