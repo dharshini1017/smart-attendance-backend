@@ -1,5 +1,5 @@
 Flask==2.3.3
-Flask-Cors==3.1.2
+Flask-Cors==3.0.10       # <-- downgrade from 3.1.2
 Flask-JWT-Extended==4.5.1
 mysql-connector-python==8.1.0
 bcrypt==4.1.0
