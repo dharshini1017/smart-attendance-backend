@@ -1,23 +1,22 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import base64, cv2, numpy as np, os
-import bcrypt
 
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import (
-    JWTManager, create_access_token,
-    jwt_required, get_jwt_identity
+    JWTManager, create_access_token, jwt_required, get_jwt_identity,
+    verify_jwt_in_request, get_jwt
 )
 from datetime import timedelta
 
 from db import get_db
 from face_service import load_known_faces, recognize_face
-from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+
 app = Flask(__name__)
 
 # ==========================
 # CONFIG
 # ==========================
-
 CORS(
     app,
     resources={r"/*": {"origins": "http://localhost:8080"}},
@@ -28,19 +27,16 @@ CORS(
 app.config["JWT_SECRET_KEY"] = "smart-attendance-secret-key"
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=4)
 
-# 🔒 FORCE JWT TO USE HEADERS ONLY
+# Force JWT to use headers only
 app.config["JWT_TOKEN_LOCATION"] = ["headers"]
 app.config["JWT_HEADER_NAME"] = "Authorization"
 app.config["JWT_HEADER_TYPE"] = "Bearer"
-
-# ❌ NO COOKIES
 app.config["JWT_COOKIE_CSRF_PROTECT"] = False
-
 
 jwt = JWTManager(app)
 
 # ==========================
-# JWT ERROR HANDLERS (IMPORTANT)
+# JWT ERROR HANDLERS
 # ==========================
 @jwt.unauthorized_loader
 def missing_token(reason):
@@ -54,19 +50,19 @@ def invalid_token(reason):
 def expired_token(jwt_header, jwt_payload):
     return jsonify({"message": "Token expired"}), 401
 
-
-# Load face encodings on startup
+# Load face encodings at startup
 load_known_faces()
 
-
+# ==========================
+# HOME
+# ==========================
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({"status": "Smart Attendance Backend Running"})
 
-
-# =====================================================
+# ==========================
 # STUDENT REGISTRATION
-# =====================================================
+# ==========================
 @app.route("/student/register", methods=["POST"])
 def register_student():
     try:
@@ -99,7 +95,6 @@ def register_student():
         for i, img in enumerate(images):
             img_bytes = base64.b64decode(img.split(",")[1])
             path = f"{student_dir}/{i}.jpg"
-
             with open(path, "wb") as f:
                 f.write(img_bytes)
 
@@ -119,10 +114,9 @@ def register_student():
         print("❌ STUDENT REGISTER ERROR:", e)
         return jsonify({"message": "Registration failed"}), 500
 
-
-# =====================================================
-# STUDENT LOGIN (NO SECURITY)
-# =====================================================
+# ==========================
+# STUDENT LOGIN
+# ==========================
 @app.route("/student/login", methods=["POST"])
 def student_login():
     roll_no = request.json.get("rollNo")
@@ -141,10 +135,9 @@ def student_login():
 
     return jsonify(student), 200
 
-
-# =====================================================
+# ==========================
 # TEACHER REGISTER
-# =====================================================
+# ==========================
 @app.route("/teacher/register", methods=["POST"])
 def register_teacher():
     data = request.get_json()
@@ -157,10 +150,7 @@ def register_teacher():
     if not name or not email or not password:
         return jsonify({"message": "Invalid data"}), 400
 
-    password_hash = bcrypt.hashpw(
-        password.encode("utf-8"),
-        bcrypt.gensalt()
-    ).decode("utf-8")
+    password_hash = generate_password_hash(password)
 
     try:
         conn = get_db()
@@ -181,9 +171,11 @@ def register_teacher():
         print("❌ TEACHER REGISTER ERROR:", e)
         return jsonify({"message": "Teacher already exists"}), 409
 
+# ==========================
+# TEACHER LOGIN
+# ==========================
 @app.route("/teacher/login", methods=["POST", "OPTIONS"])
 def teacher_login():
-
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -203,14 +195,11 @@ def teacher_login():
     if not teacher:
         return jsonify({"message": "Invalid credentials"}), 401
 
-    if not bcrypt.checkpw(
-        password.encode("utf-8"),
-        teacher["password_hash"].encode("utf-8")
-    ):
+    if not check_password_hash(teacher["password_hash"], password):
         return jsonify({"message": "Invalid credentials"}), 401
 
     token = create_access_token(
-        identity=str(teacher["id"]),     # 🔥 FIX IS HERE
+        identity=str(teacher["id"]),
         additional_claims={
             "role": "teacher",
             "email": teacher["email"]
@@ -227,14 +216,11 @@ def teacher_login():
         }
     }), 200
 
-#  =====================================================
+# ==========================
 # FACE RECOGNITION (TEACHER ONLY)
-# =====================================================
-from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
-
+# ==========================
 @app.route("/recognize", methods=["POST", "OPTIONS"])
 def recognize():
-
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -244,8 +230,8 @@ def recognize():
         print("JWT ERROR:", e)
         return jsonify({"message": "Unauthorized"}), 401
 
-    user_id = get_jwt_identity()   # STRING
-    claims = get_jwt()             # EXTRA DATA
+    user_id = get_jwt_identity()
+    claims = get_jwt()
 
     if claims.get("role") != "teacher":
         return jsonify({"message": "Unauthorized"}), 403
@@ -291,23 +277,20 @@ def recognize():
 
     return jsonify({"rollNo": roll_no, "confidence": confidence}), 200
 
-# =====================================================
-# FETCH STUDENT ATTENDANCE (PUBLIC)
-# =====================================================
+# ==========================
+# FETCH STUDENT ATTENDANCE
+# ==========================
 @app.route("/student/attendance/<roll_no>", methods=["GET"])
 def get_student_attendance(roll_no):
     conn = get_db()
     cur = conn.cursor(dictionary=True)
 
-    cur.execute(
-        """
+    cur.execute("""
         SELECT id, roll_no, class_code, subject, date, time, confidence
         FROM attendance
         WHERE roll_no=%s
         ORDER BY date DESC, time DESC
-        """,
-        (roll_no,)
-    )
+    """, (roll_no,))
 
     rows = cur.fetchall()
     cur.close()
@@ -327,9 +310,8 @@ def get_student_attendance(roll_no):
 
     return jsonify(records)
 
-
-# =====================================================
+# ==========================
 # APP START
-# =====================================================
+# ==========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
